@@ -1,0 +1,490 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cube Engine | 3D Game Engine</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* Цветовая палитра и переменные */
+        :root {
+            --bg-dark: #050914;
+            --primary: #00f0ff;
+            --secondary: #7000ff;
+            --accent: #ff0055;
+            --card-bg: rgba(16, 23, 42, 0.75);
+            --card-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            overflow-x: hidden;
+            /* Объемный фон-сетка */
+            background-image: 
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                radial-gradient(circle at 50% 0%, rgba(112, 0, 255, 0.15), transparent 40%);
+            background-size: 40px 40px, 40px 40px, 100% 100%;
+            background-attachment: fixed;
+        }
+
+        /* Навигация (Стеклянный объем) */
+        .nav-3d {
+            background: rgba(5, 9, 20, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--card-border);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.8), inset 0 -1px 0 rgba(0, 240, 255, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            color: #94a3b8;
+            padding: 0.5rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            font-weight: 600;
+        }
+
+        .nav-btn::before {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 0; height: 3px;
+            background: var(--primary);
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .nav-btn:hover::before, .nav-btn.active::before {
+            width: 80%;
+        }
+
+        .nav-btn.active {
+            color: #fff;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        /* SPA Логика */
+        .page-section {
+            display: none;
+            opacity: 0;
+        }
+
+        .page-section.active {
+            display: block;
+            animation: popIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.95) translateY(20px) rotateX(10deg); }
+            100% { opacity: 1; transform: scale(1) translateY(0) rotateX(0deg); }
+        }
+
+        /* === 3D КАРТОЧКИ (МАКСИМУМ ОБЪЕМА) === */
+        .perspective-grid {
+            perspective: 1200px;
+        }
+
+        .card-3d {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+            border-radius: 1.5rem;
+            padding: 2rem;
+            border: 1px solid var(--card-border);
+            /* Сложная многоуровневая тень для объема */
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.7),
+                0 0 20px rgba(0, 0, 0, 0.5) inset,
+                0 1px 1px rgba(255, 255, 255, 0.2) inset;
+            transform-style: preserve-3d;
+            transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s ease;
+            position: relative;
+        }
+
+        .card-3d:hover {
+            transform: translateY(-10px) rotateX(5deg) rotateY(-5deg);
+            box-shadow: 
+                30px 40px 50px rgba(0, 0, 0, 0.8),
+                -10px -10px 30px rgba(0, 240, 255, 0.1),
+                0 0 20px rgba(0, 0, 0, 0.5) inset,
+                0 1px 1px rgba(255, 255, 255, 0.3) inset;
+            border-color: rgba(0, 240, 255, 0.3);
+            z-index: 10;
+        }
+
+        /* Выпирающие элементы внутри карточки */
+        .card-content-pop {
+            transform: translateZ(40px); /* Текст и картинки выпирают вперед */
+        }
+
+        .card-bg-glow {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.1), transparent 70%);
+            border-radius: inherit;
+            transform: translateZ(0);
+            pointer-events: none;
+        }
+
+        /* Объемные Изображения */
+        .img-3d-wrapper {
+            position: relative;
+            border-radius: 1rem;
+            transform-style: preserve-3d;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(255,255,255,0.05);
+            transition: transform 0.6s ease;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .img-3d-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.6s ease, filter 0.6s ease;
+            filter: brightness(0.85) contrast(1.1);
+        }
+
+        .img-3d-wrapper:hover img {
+            transform: scale(1.08);
+            filter: brightness(1.1) contrast(1.2);
+        }
+
+        .img-3d-wrapper::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* Текст */
+        .text-glow {
+            color: #fff;
+            text-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+        }
+        
+        .gradient-text-3d {
+            background: linear-gradient(to bottom right, #fff, #00f0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+        }
+
+        /* Декоративные левитирующие кубы (CSS) */
+        .cube-wireframe {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            border: 2px solid rgba(0, 240, 255, 0.1);
+            transform: rotateX(45deg) rotateY(45deg);
+            z-index: -1;
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.05) inset;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Навигация -->
+    <header class="nav-3d py-4">
+        <div class="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="text-2xl font-black tracking-widest flex items-center gap-3">
+                <div class="w-8 h-8 bg-gradient-to-br from-cyan-400 to-purple-600 rounded shadow-[0_0_15px_rgba(0,240,255,0.5)] transform rotate-12"></div>
+                <span class="gradient-text-3d">CUBE ENGINE</span>
+            </div>
+            <nav class="flex space-x-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+                <button class="nav-btn active" onclick="switchPage('page-home')">Главная</button>
+                <button class="nav-btn" onclick="switchPage('page-arch')">Архитектура</button>
+                <button class="nav-btn" onclick="switchPage('page-graphics')">Графика</button>
+                <button class="nav-btn" onclick="switchPage('page-results')">UI & Итоги</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12 perspective-grid flex-grow">
+
+        <!-- ================= СТРАНИЦА 1: ГЛАВНАЯ ================= -->
+        <section id="page-home" class="page-section active">
+            
+            <div class="flex flex-col lg:flex-row items-center gap-12 mb-20">
+                <div class="lg:w-1/2 card-content-pop">
+                    <div class="inline-block px-5 py-2 rounded-lg bg-slate-800 border border-slate-600 shadow-lg mb-6">
+                        <span class="text-cyan-400 font-bold tracking-widest text-sm">ВКР 2026 | МОСКВА</span>
+                    </div>
+                    <h1 class="text-5xl lg:text-7xl font-black mb-6 leading-tight" style="text-shadow: 0 10px 20px rgba(0,0,0,0.8);">
+                        РАЗРАБОТКА <br>
+                        <span class="gradient-text-3d text-6xl lg:text-8xl">3D ДВИЖКА</span>
+                    </h1>
+                    <p class="text-xl text-gray-400 mb-8 max-w-lg border-l-4 border-purple-500 pl-4 shadow-sm">
+                        Легковесный инструмент для образовательных и научных целей. Баланс между производительностью C++ и простотой интеграции.
+                    </p>
+                    
+                    <div class="flex gap-6 mt-8">
+                        <div class="card-3d p-4 w-1/2">
+                            <p class="text-xs text-cyan-400 mb-1">Исполнитель</p>
+                            <p class="font-bold text-lg text-white">Краснов Я.М.</p>
+                        </div>
+                        <div class="card-3d p-4 w-1/2">
+                            <p class="text-xs text-purple-400 mb-1">Руководитель</p>
+                            <p class="font-bold text-lg text-white">Сальмянова А.С.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="lg:w-1/2 w-full">
+                    <!-- Изображение 1 из презентации (Абстрактный куб/движок) -->
+                    <div class="img-3d-wrapper aspect-[4/3] transform hover:rotate-y-12">
+                        <img src="https://media.easy-peasy.ai/aaa4dc35-316e-4d9b-a7c5-f5113287f8ce/6cc15754-9bef-4f5f-81ef-6b1c6c2329ca_medium.webp" alt="Cube Engine Abstract" class="object-cover">
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-10">
+                <div class="card-3d">
+                    <div class="card-bg-glow"></div>
+                    <div class="card-content-pop">
+                        <!-- Изображение 2 -->
+                        <div class="img-3d-wrapper h-48 mb-6">
+                            <img src="https://media.istockphoto.com/id/947376852/photo/abstract-of-architecture-space-with-white-sphere-ball-are-falling-from-sky-to-the-ground-with.jpg?s=1024x1024&w=is&k=20&c=n_fHwl7OfZfAxvth_HTDgn8biL8bIXpl4omqmoFFIFM=" alt="3D Space">
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mb-4 text-glow">Что такое движок?</h2>
+                        <p class="text-gray-400">
+                            Программное обеспечение, обеспечивающее базовые технологии для создания видеоигр: графику, звук, физику и скриптинг. Предоставляет абстракцию над низкоуровневым кодом.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="card-3d">
+                    <div class="card-bg-glow"></div>
+                    <div class="card-content-pop">
+                        <!-- Доп. Тематическое изображение -->
+                        <div class="img-3d-wrapper h-48 mb-6">
+                            <img src="https://avatars.mds.yandex.net/i?id=95c98a94191c116bcac8b299ac33a274_l-4219911-images-thumbs&n=13" alt="Tech Abstract">
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mb-4 text-glow">Актуальность</h2>
+                        <p class="text-gray-400">
+                            В отличие от перегруженных гигантов (Unreal/Unity), Cube Engine идеален для изучения работы систем рендеринга и сборки небольших 3D-приложений без излишнего overhead'а.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= СТРАНИЦА 2: АРХИТЕКТУРА ================= -->
+        <section id="page-arch" class="page-section">
+            <h1 class="text-4xl md:text-5xl font-black mb-12 text-center text-glow">АРХИТЕКТУРА ЯДРА</h1>
+            
+            <div class="card-3d mb-12 p-8">
+                <div class="card-content-pop flex flex-col lg:flex-row gap-8 items-center">
+                    <div class="lg:w-1/3">
+                        <h2 class="text-3xl font-bold text-cyan-400 mb-4">Схема Фреймворка</h2>
+                        <p class="text-gray-300 mb-6">
+                            Замкнутый цикл (Game Loop) объединяет модули ввода, рендеринга и скриптов в единую отказоустойчивую систему. 
+                        </p>
+                        <div class="bg-black/50 p-4 rounded border border-white/10 shadow-inner">
+                            <code class="text-sm text-purple-400">while(!window.Closed()) {<br>&nbsp;&nbsp;UpdatePhysics();<br>&nbsp;&nbsp;RenderFrame();<br>}</code>
+                        </div>
+                    </div>
+                    <div class="lg:w-2/3">
+                        <!-- Изображение 3 из презентации (Схема фреймворка) -->
+                        <div class="img-3d-wrapper bg-slate-200">
+                            <img src="https://eu-images.contentstack.com/v3/assets/blt740a130ae3c5d529/bltd8612e4bb573180d/650e97299732e4498bf42b7e/Framework.png/?width=1280&auto=webp&quality=80&disable=upscale" alt="Framework Schema" class="mix-blend-multiply">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-8">
+                <div class="card-3d">
+                    <div class="card-content-pop">
+                        <div class="img-3d-wrapper h-32 mb-6">
+                            <img src="https://avatars.mds.yandex.net/i?id=beeac16c51686d2bf41a17c47f40fd6d5ffdf251-5436731-images-thumbs&n=13" alt="C++ Code">
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-2">Ядро (C++)</h3>
+                        <p class="text-gray-400 text-sm">Максимальное быстродействие и прямое управление памятью. Стандарт AAA-индустрии.</p>
+                    </div>
+                </div>
+
+                <div class="card-3d" style="transform: translateZ(20px);">
+                    <div class="card-content-pop">
+                        <div class="img-3d-wrapper h-32 mb-6">
+                            <img src="https://avatars.mds.yandex.net/i?id=499669a89691d102e4c3679996ba477cbc38032d-10330387-images-thumbs&n=13" alt="Nodes">
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-2">Подсистемы</h3>
+                        <p class="text-gray-400 text-sm">Single-Window Flow, Менеджер событий (Callbacks), Асинхронное логирование.</p>
+                    </div>
+                </div>
+
+                <div class="card-3d">
+                    <div class="card-content-pop">
+                        <div class="img-3d-wrapper h-32 mb-6 bg-slate-800 flex items-center justify-center">
+                            <div class="text-4xl font-black text-cyan-500 opacity-50">VS 2022</div>
+                        </div>
+                        <h3 class="text-xl font-bold text-white mb-2">Инструментарий</h3>
+                        <p class="text-gray-400 text-sm">Visual Studio 2022, Git, Win32 API для глубокой интеграции с ОС Windows.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= СТРАНИЦА 3: ГРАФИКА ================= -->
+        <section id="page-graphics" class="page-section">
+            <h1 class="text-4xl md:text-5xl font-black mb-12 text-center text-glow">ГРАФИЧЕСКИЙ КОНВЕЙЕР</h1>
+
+            <div class="grid lg:grid-cols-2 gap-12 mb-12">
+                <div class="card-3d flex flex-col justify-center">
+                    <div class="card-content-pop">
+                        <h2 class="text-3xl font-bold text-cyan-400 mb-6">DirectX 11 API</h2>
+                        <p class="text-gray-300 text-lg mb-6 shadow-sm">
+                            Баланс мощности и контроля. Поддержка HLSL 5.0 для расчета сложного освещения и PBR материалов.
+                        </p>
+                        
+                        <div class="space-y-4">
+                            <div class="bg-black/40 p-4 rounded-lg border border-cyan-500/30">
+                                <strong class="text-white">Vertex Shader:</strong> <span class="text-gray-400">Расчет Model-View-Projection.</span>
+                            </div>
+                            <div class="bg-black/40 p-4 rounded-lg border border-purple-500/30">
+                                <strong class="text-white">Pixel Shader:</strong> <span class="text-gray-400">Свет, текстуры, карты нормалей.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-3d p-2">
+                    <div class="card-content-pop h-full">
+                        <!-- Изображение 4 из презентации (Пайплайн освещения) -->
+                        <div class="img-3d-wrapper h-full bg-slate-100 min-h-[350px]">
+                            <img src="https://docs.unity3d.com/es/2019.4/uploads/Main/BestPracticeLightingPipeline3.svg" alt="Lighting Pipeline" class="p-4 mix-blend-multiply">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-3d">
+                <div class="card-content-pop text-center">
+                    <h2 class="text-3xl font-bold text-white mb-8">Управление Ассетами</h2>
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div class="bg-slate-900/80 p-6 rounded-xl border border-white/5 shadow-2xl">
+                            <h3 class="text-xl font-bold text-purple-400 mb-2">3D Модели (OBJ/FBX)</h3>
+                            <p class="text-sm text-gray-400">Автоматический парсинг геометрии и генерация буферов (VBO/IBO) для быстрой отрисовки на GPU.</p>
+                        </div>
+                        <div class="bg-slate-900/80 p-6 rounded-xl border border-white/5 shadow-2xl">
+                            <h3 class="text-xl font-bold text-cyan-400 mb-2">Сериализация сцены</h3>
+                            <p class="text-sm text-gray-400">Запись позиций, поворотов и компонентов всех объектов сцены в JSON/XML для сохранения прогресса.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= СТРАНИЦА 4: ИТОГИ ================= -->
+        <section id="page-results" class="page-section">
+            
+            <div class="grid lg:grid-cols-12 gap-8 mb-12">
+                <div class="lg:col-span-5 flex flex-col gap-8">
+                    <div class="card-3d flex-grow">
+                        <div class="card-content-pop">
+                            <h2 class="text-2xl font-bold text-white mb-4 text-glow">UI / UX Интерфейс</h2>
+                            <p class="text-gray-400 mb-6">
+                                Визуальная среда для сборки уровней. Включает окно сцены, иерархию объектов и инспектор свойств.
+                            </p>
+                            <!-- Тематическое изображение UI -->
+                            <div class="img-3d-wrapper h-40">
+                                <img src="https://avatars.mds.yandex.net/i?id=efc844cac3d3fe4bebf0fd93441d1a78_l-5244544-images-thumbs&n=13" alt="UI Design">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-3d bg-gradient-to-br from-purple-900/50 to-black">
+                        <div class="card-content-pop">
+                            <h2 class="text-xl font-bold text-purple-400 mb-2">C# Скриптинг</h2>
+                            <p class="text-sm text-gray-300">
+                                Внедрена интеграция с C# (Mono). Позволяет писать высокоуровневую логику поведения объектов без рекомпиляции ядра C++.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7">
+                    <div class="card-3d h-full p-2">
+                        <div class="card-content-pop h-full flex flex-col">
+                            <h3 class="text-white font-bold ml-4 mt-2 mb-4 drop-shadow-md">Рабочее пространство</h3>
+                            <!-- Изображение 5 из презентации (UI Скриншот) -->
+                            <div class="img-3d-wrapper flex-grow min-h-[300px]">
+                                <img src="https://www.uxdesigninstitute.com/blog/wp-content/uploads/2022/02/Screenshot-2022-02-21-at-14.56.04.png" alt="Engine UI Screenshot" class="object-left-top">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Итоговая объемная плашка -->
+            <div class="card-3d text-center py-16" style="background: linear-gradient(180deg, rgba(16, 185, 129, 0.1), rgba(0,0,0,0.8)); border-top: 4px solid #10b981;">
+                <div class="card-content-pop">
+                    <div class="w-24 h-24 mx-auto mb-6 bg-emerald-500/20 rounded-full flex items-center justify-center border-2 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                        <svg class="w-12 h-12 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <h1 class="text-5xl font-black text-white mb-6 tracking-wide drop-shadow-lg">ПРОЕКТ ЗАВЕРШЕН</h1>
+                    <p class="text-xl text-gray-300 max-w-3xl mx-auto mb-8 font-light shadow-sm">
+                        Движок Cube Engine успешно прошел тестирование рендеринга и скриптов. Цель по созданию легковесного инструмента достигнута.
+                    </p>
+                    <div class="inline-block bg-black/50 px-8 py-3 rounded-full border border-emerald-500/30 text-emerald-400 font-bold tracking-widest shadow-inner">
+                        ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА • МОСКВА, 2026
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <footer class="mt-20 border-t border-white/10 bg-black/80 py-8 text-center text-gray-500 text-sm shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
+        <p>© 2026 Краснов Я.М. | Cube Engine Project</p>
+    </footer>
+
+    <!-- Скрипт SPA-навигации -->
+    <script>
+        function switchPage(pageId) {
+            // Скрытие всех страниц
+            const pages = document.querySelectorAll('.page-section');
+            pages.forEach(page => {
+                page.classList.remove('active');
+            });
+
+            // Показ нужной страницы
+            const targetPage = document.getElementById(pageId);
+            if (targetPage) {
+                // Небольшая задержка для перезапуска анимации
+                setTimeout(() => {
+                    targetPage.classList.add('active');
+                }, 10);
+            }
+
+            // Обновление кнопок
+            const buttons = document.querySelectorAll('.nav-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            if(event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+            }
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
+
